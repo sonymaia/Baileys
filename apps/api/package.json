@@ -6,8 +6,10 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^10.3.0",
     "@whiskeysockets/baileys": "6.7.21",
-    "fastify": "^4.26.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.7.1",
     "pino": "^8.17.0"
   }
 }
