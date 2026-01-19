@@ -1,48 +1,62 @@
 import makeWASocket, {
   useMultiFileAuthState,
-  DisconnectReason
+  DisconnectReason,
+  fetchLatestBaileysVersion
 } from "@whiskeysockets/baileys"
+import { Boom } from "@hapi/boom"
 
 let sock = null
 let qrCode = null
-let initializing = false
 
 export async function initWhatsApp() {
-  if (sock || initializing) return
-
-  initializing = true
-  console.log("📲 Inicializando WhatsApp")
+  console.log("📲 Inicializando WhatsApp...")
 
   const { state, saveCreds } = await useMultiFileAuthState("auth")
+  
+  // Busca a versão mais recente suportada para evitar erros de "versão antiga"
+  const { version, isLatest } = await fetchLatestBaileysVersion()
+  console.log(`Usando versão WA v${version.join('.')}, isLatest: ${isLatest}`)
 
   sock = makeWASocket({
+    version,
     auth: state,
-    printQRInTerminal: false
+    printQRInTerminal: false,
+    // Melhora a estabilidade em Docker
+    browser: ["Baileys API", "Chrome", "10.0.0"] 
   })
 
   sock.ev.on("creds.update", saveCreds)
 
-  sock.ev.on("connection.update", (update) => {
+  sock.ev.on("connection.update", async (update) => {
     const { connection, qr, lastDisconnect } = update
 
     if (qr) {
       qrCode = qr
-      console.log("📸 QR gerado")
+      console.log("📸 Novo QR Code gerado")
     }
 
     if (connection === "open") {
-      console.log("✅ WhatsApp conectado")
+      console.log("✅ WhatsApp conectado com sucesso!")
       qrCode = null
     }
 
     if (connection === "close") {
-      console.log("⚠️ WhatsApp desconectado")
+      const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut
+      
+      console.log('⚠️ Conexão fechada devido a ', lastDisconnect.error, ', reconectando ', shouldReconnect)
+      
+      qrCode = null
       sock = null
-      initializing = false
+
+      // Lógica de Reconexão
+      if (shouldReconnect) {
+        // Pequeno delay para evitar loop frenético
+        setTimeout(() => initWhatsApp(), 5000)
+      } else {
+        console.log('❌ Desconectado (Logout). Delete a pasta "auth" e reinicie para scanear novamente.')
+      }
     }
   })
-
-  initializing = false
 }
 
 export function getSocket() {
