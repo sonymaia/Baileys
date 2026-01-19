@@ -1,52 +1,61 @@
 import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason
+  DisconnectReason,
+  useMultiFileAuthState
 } from "@whiskeysockets/baileys"
-import { Boom } from "@hapi/boom"
-import fs from "fs"
 
 let sock
+let lastQr = null
+let initializing = false
 
 export async function initWhatsApp() {
+  if (initializing) return
+  initializing = true
+
   const { state, saveCreds } = await useMultiFileAuthState("/app/auth")
 
   sock = makeWASocket({
     auth: state,
-    printQRInTerminal: false // 👈 NÃO usar mais
+    browser: ["Ubuntu", "Chrome", "22.04.4"]
   })
+
+  sock.ev.on("creds.update", saveCreds)
 
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
-      console.log("📱 ESCANEIE ESTE QR NO WHATSAPP:")
-      console.log(qr)
-    }
-
-    if (connection === "close") {
-      const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode
-
-      console.log("⚠️ WhatsApp desconectado:", statusCode)
-
-      if (statusCode !== DisconnectReason.loggedOut) {
-        console.log("🔄 Tentando reconectar...")
-        initWhatsApp()
-      } else {
-        console.log("❌ Sessão inválida. Apague /app/auth e escaneie novamente.")
-      }
+      lastQr = qr
+      console.log("📱 QR gerado (use /qr)")
     }
 
     if (connection === "open") {
       console.log("✅ WhatsApp conectado com sucesso!")
+      lastQr = null
+    }
+
+    if (connection === "close") {
+      const statusCode =
+        lastDisconnect?.error?.output?.statusCode
+
+      console.log("⚠️ WhatsApp desconectado:", statusCode)
+
+      if (statusCode !== DisconnectReason.loggedOut) {
+        setTimeout(() => {
+          initializing = false
+          initWhatsApp()
+        }, 5000)
+      } else {
+        console.log("❌ Sessão inválida. Apague /app/auth")
+      }
     }
   })
-
-  sock.ev.on("creds.update", saveCreds)
 }
 
 export function getSocket() {
-  if (!sock) {
-    throw new Error("WhatsApp não inicializado")
-  }
+  if (!sock) throw new Error("WhatsApp não inicializado")
   return sock
+}
+
+export function getQr() {
+  return lastQr
 }

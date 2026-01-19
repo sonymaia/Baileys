@@ -1,16 +1,11 @@
 import Fastify from "fastify"
 import rateLimit from "@fastify/rate-limit"
-import { initWhatsApp } from "./whatsapp.js"
+import { initWhatsApp, getQr } from "./whatsapp.js"
 import { routes } from "./routes.js"
 import "dotenv/config"
 
-const app = Fastify({
-  logger: true
-})
+const app = Fastify({ logger: true })
 
-/**
- * Rate Limit GLOBAL
- */
 await app.register(rateLimit, {
   global: true,
   max: Number(process.env.RATE_LIMIT_MAX || 100),
@@ -18,47 +13,47 @@ await app.register(rateLimit, {
 })
 
 /**
- * Healthcheck (público)
+ * Healthcheck público
  */
-app.get("/health", async () => {
+app.get("/health", async () => ({
+  status: "ok",
+  service: "baileys-api",
+  timestamp: new Date().toISOString()
+}))
+
+/**
+ * QR CODE (usar apenas até conectar)
+ */
+app.get("/qr", async () => {
+  const qr = getQr()
+
+  if (!qr) {
+    return {
+      status: "ok",
+      message: "WhatsApp já conectado ou QR indisponível"
+    }
+  }
+
   return {
-    status: "ok",
-    service: "baileys-api",
-    timestamp: new Date().toISOString()
+    status: "pending",
+    qr
   }
 })
 
 /**
- * Inicializa WhatsApp apenas se habilitado
+ * Inicializa WhatsApp se habilitado
  */
 if (process.env.ENABLE_WHATSAPP === "true") {
-  app.log.info("WhatsApp ENABLED, initializing...")
+  console.log("WhatsApp ENABLED, initializing...")
   await initWhatsApp()
-} else {
-  app.log.warn("WhatsApp DISABLED by environment variable")
 }
 
 /**
- * Registra rotas
+ * Rotas protegidas
  */
 await app.register(routes)
 
-/**
- * Start server
- */
 await app.listen({
   port: Number(process.env.PORT || 3000),
   host: "0.0.0.0"
 })
-
-/**
- * Graceful shutdown
- */
-const closeApp = async (signal) => {
-  app.log.warn(`Received ${signal}, shutting down...`)
-  await app.close()
-  process.exit(0)
-}
-
-process.on("SIGINT", closeApp)
-process.on("SIGTERM", closeApp)
