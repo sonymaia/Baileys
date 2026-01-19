@@ -6,7 +6,7 @@
     "start": "node src/server.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "workspace:*",
+    "@whiskeysockets/baileys": "6.7.21",
     "fastify": "^4.26.0",
     "pino": "^8.17.0"
   }
