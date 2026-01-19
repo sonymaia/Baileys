@@ -1,7 +1,6 @@
 import baileys from "@whiskeysockets/baileys"
 import { Boom } from "@hapi/boom"
 
-// Garante a compatibilidade do import em ESM
 const makeWASocket = baileys.default || baileys
 const { 
   useMultiFileAuthState, 
@@ -11,7 +10,7 @@ const {
 
 let sock = null
 let qrCode = null
-let isConnecting = false // Trava para evitar múltiplas tentativas simultâneas
+let isConnecting = false
 
 export async function initWhatsApp() {
   if (isConnecting) return
@@ -27,7 +26,7 @@ export async function initWhatsApp() {
       version,
       auth: state,
       printQRInTerminal: false,
-      browser: ["Baileys API", "Chrome", "1.0.0"]
+      browser: ["Ubuntu", "Chrome", "20.0.0"]
     })
 
     sock.ev.on("creds.update", saveCreds)
@@ -43,7 +42,7 @@ export async function initWhatsApp() {
       if (connection === "open") {
         console.log("✅ WhatsApp conectado!")
         qrCode = null
-        isConnecting = false 
+        isConnecting = false
       }
 
       if (connection === "close") {
@@ -51,10 +50,12 @@ export async function initWhatsApp() {
         const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
 
-        console.log(`⚠️ Conexão fechada. Razão: ${statusCode}. Reconectar: ${shouldReconnect}`)
+        console.log(`⚠️ Conexão fechada. Razão: ${statusCode}. Reconectando: ${shouldReconnect}`)
 
         if (shouldReconnect) {
           setTimeout(() => initWhatsApp(), 5000)
+        } else {
+          console.log("❌ Desconectado: Você precisa deletar a pasta /auth e escanear novamente.")
         }
       }
     })
@@ -64,5 +65,5 @@ export async function initWhatsApp() {
   }
 }
 
-export function getSocket() { return sock }
-export function getQR() { return qrCode }
+export const getSocket = () => sock
+export const getQR = () => qrCode
