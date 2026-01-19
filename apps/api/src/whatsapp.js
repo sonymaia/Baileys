@@ -1,68 +1,68 @@
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
-} from "@whiskeysockets/baileys"
+import baileys from "@whiskeysockets/baileys"
 import { Boom } from "@hapi/boom"
+
+// Garante a compatibilidade do import em ESM
+const makeWASocket = baileys.default || baileys
+const { 
+  useMultiFileAuthState, 
+  DisconnectReason, 
+  fetchLatestBaileysVersion 
+} = baileys
 
 let sock = null
 let qrCode = null
+let isConnecting = false // Trava para evitar múltiplas tentativas simultâneas
 
 export async function initWhatsApp() {
+  if (isConnecting) return
+  isConnecting = true
+
   console.log("📲 Inicializando WhatsApp...")
 
-  const { state, saveCreds } = await useMultiFileAuthState("auth")
-  
-  // Busca a versão mais recente suportada para evitar erros de "versão antiga"
-  const { version, isLatest } = await fetchLatestBaileysVersion()
-  console.log(`Usando versão WA v${version.join('.')}, isLatest: ${isLatest}`)
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState("auth")
+    const { version } = await fetchLatestBaileysVersion()
 
-  sock = makeWASocket({
-    version,
-    auth: state,
-    printQRInTerminal: false,
-    // Melhora a estabilidade em Docker
-    browser: ["Baileys API", "Chrome", "10.0.0"] 
-  })
+    sock = makeWASocket({
+      version,
+      auth: state,
+      printQRInTerminal: false,
+      browser: ["Baileys API", "Chrome", "1.0.0"]
+    })
 
-  sock.ev.on("creds.update", saveCreds)
+    sock.ev.on("creds.update", saveCreds)
 
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, qr, lastDisconnect } = update
+    sock.ev.on("connection.update", async (update) => {
+      const { connection, qr, lastDisconnect } = update
 
-    if (qr) {
-      qrCode = qr
-      console.log("📸 Novo QR Code gerado")
-    }
-
-    if (connection === "open") {
-      console.log("✅ WhatsApp conectado com sucesso!")
-      qrCode = null
-    }
-
-    if (connection === "close") {
-      const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut
-      
-      console.log('⚠️ Conexão fechada devido a ', lastDisconnect.error, ', reconectando ', shouldReconnect)
-      
-      qrCode = null
-      sock = null
-
-      // Lógica de Reconexão
-      if (shouldReconnect) {
-        // Pequeno delay para evitar loop frenético
-        setTimeout(() => initWhatsApp(), 5000)
-      } else {
-        console.log('❌ Desconectado (Logout). Delete a pasta "auth" e reinicie para scanear novamente.')
+      if (qr) {
+        qrCode = qr
+        console.log("📸 Novo QR Code gerado")
       }
-    }
-  })
+
+      if (connection === "open") {
+        console.log("✅ WhatsApp conectado!")
+        qrCode = null
+        isConnecting = false 
+      }
+
+      if (connection === "close") {
+        isConnecting = false
+        const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut
+
+        console.log(`⚠️ Conexão fechada. Razão: ${statusCode}. Reconectar: ${shouldReconnect}`)
+
+        if (shouldReconnect) {
+          setTimeout(() => initWhatsApp(), 5000)
+        }
+      }
+    })
+  } catch (err) {
+    console.error("Erro fatal na inicialização:", err)
+    isConnecting = false
+  }
 }
 
-export function getSocket() {
-  return sock
-}
-
-export function getQR() {
-  return qrCode
-}
+export function getSocket() { return sock }
+export function getQR() { return qrCode }
