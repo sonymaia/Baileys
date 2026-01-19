@@ -6,6 +6,7 @@ import { Boom } from "@hapi/boom"
 
 let sock = null
 let currentQr = null
+let started = false
 
 export function getSocket() {
   return sock
@@ -16,6 +17,9 @@ export function getQr() {
 }
 
 export async function initWhatsApp() {
+  if (started) return
+  started = true
+
   const { state, saveCreds } = await useMultiFileAuthState("/app/auth")
 
   sock = makeWASocket({
@@ -26,9 +30,7 @@ export async function initWhatsApp() {
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update
 
-    if (qr) {
-      currentQr = qr
-    }
+    if (qr) currentQr = qr
 
     if (connection === "open") {
       currentQr = null
@@ -37,12 +39,13 @@ export async function initWhatsApp() {
 
     if (connection === "close") {
       const shouldReconnect =
-        (lastDisconnect?.error instanceof Boom) &&
+        lastDisconnect?.error instanceof Boom &&
         lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut
 
       console.warn("⚠️ WhatsApp desconectado")
 
       if (shouldReconnect) {
+        started = false
         initWhatsApp()
       }
     }
