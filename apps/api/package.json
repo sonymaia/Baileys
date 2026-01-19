@@ -1,0 +1,13 @@
+{
+  "name": "baileys-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "workspace:*",
+    "fastify": "^4.26.0",
+    "pino": "^8.17.0"
+  }
+}
