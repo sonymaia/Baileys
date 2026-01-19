@@ -2,63 +2,49 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason
 } from "@whiskeysockets/baileys"
-import fs from "fs"
+import Pino from "pino"
 
-let sock
-let latestQR = null
-let isConnecting = false
+let sock = null
+let latestQr = null
 
 export async function initWhatsApp() {
-  if (isConnecting) return
-  isConnecting = true
-
-  const authDir = "/app/auth"
-
-  if (!fs.existsSync(authDir)) {
-    fs.mkdirSync(authDir, { recursive: true })
-  }
-
-  const { state, saveCreds } = await useMultiFileAuthState(authDir)
+  const { state, saveCreds } = await useMultiFileAuthState("/app/auth")
 
   sock = makeWASocket({
     auth: state,
-    printQRInTerminal: false
-  })
-
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update
-
-    if (qr) {
-      latestQR = qr
-      console.log("📲 QR gerado, aguardando leitura...")
-    }
-
-    if (connection === "open") {
-      latestQR = null
-      isConnecting = false
-      console.log("✅ WhatsApp conectado com sucesso")
-    }
-
-    if (connection === "close") {
-      const reason = lastDisconnect?.error?.output?.statusCode
-      console.log("⚠️ WhatsApp desconectado:", reason)
-
-      // ❌ NÃO reconecta se precisar de QR
-      if (reason === DisconnectReason.loggedOut) {
-        console.log("🧹 Sessão inválida, aguardando novo QR")
-        isConnecting = false
-        return
-      }
-
-      // 🔄 reconecta apenas se já estava logado
-      if (!latestQR) {
-        isConnecting = false
-        setTimeout(initWhatsApp, 3000)
-      }
-    }
+    logger: Pino({ level: "silent" })
   })
 
   sock.ev.on("creds.update", saveCreds)
+
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect, qr } = update
+
+    if (qr) {
+      latestQr = qr
+      console.log("📲 QR gerado, aguardando leitura...")
+    }
+
+    if (connection === "close") {
+      const code = lastDisconnect?.error?.output?.statusCode
+      console.log("⚠️ WhatsApp desconectado:", code)
+
+      if (code !== DisconnectReason.loggedOut) {
+        setTimeout(initWhatsApp, 3000)
+      } else {
+        console.log("❌ Sessão inválida, apague /app/auth")
+      }
+    }
+
+    if (connection === "open") {
+      latestQr = null
+      console.log("✅ WhatsApp conectado com sucesso")
+    }
+  })
+}
+
+export function getQr() {
+  return latestQr
 }
 
 export function getSocket() {
@@ -66,8 +52,4 @@ export function getSocket() {
     throw new Error("WhatsApp não inicializado")
   }
   return sock
-}
-
-export function getQR() {
-  return latestQR
 }

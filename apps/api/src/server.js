@@ -13,16 +13,18 @@ await app.register(rateLimit, {
 })
 
 /**
- * Healthcheck público
+ * Healthcheck
  */
-app.get("/health", async () => ({
-  status: "ok",
-  service: "baileys-api",
-  timestamp: new Date().toISOString()
-}))
+app.get("/health", async () => {
+  return {
+    status: "ok",
+    service: "baileys-api",
+    timestamp: new Date().toISOString()
+  }
+})
 
 /**
- * QR CODE (usar apenas até conectar)
+ * Endpoint para obter QR
  */
 app.get("/qr", async () => {
   const qr = getQr()
@@ -41,10 +43,10 @@ app.get("/qr", async () => {
 })
 
 /**
- * Inicializa WhatsApp se habilitado
+ * Inicializa WhatsApp
  */
 if (process.env.ENABLE_WHATSAPP === "true") {
-  console.log("WhatsApp ENABLED, initializing...")
+  console.log("📲 WhatsApp ENABLED, initializing...")
   await initWhatsApp()
 }
 
