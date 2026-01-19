@@ -1,55 +1,54 @@
 import makeWASocket, {
-  DisconnectReason,
-  useMultiFileAuthState
+  useMultiFileAuthState,
+  DisconnectReason
 } from "@whiskeysockets/baileys"
-import { Boom } from "@hapi/boom"
 
 let sock = null
-let currentQr = null
-let started = false
-
-export function getSocket() {
-  return sock
-}
-
-export function getQr() {
-  return currentQr
-}
+let qrCode = null
+let initializing = false
 
 export async function initWhatsApp() {
-  if (started) return
-  started = true
+  if (sock || initializing) return
 
-  const { state, saveCreds } = await useMultiFileAuthState("/app/auth")
+  initializing = true
+  console.log("📲 Inicializando WhatsApp")
+
+  const { state, saveCreds } = await useMultiFileAuthState("auth")
 
   sock = makeWASocket({
     auth: state,
     printQRInTerminal: false
   })
 
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect, qr } = update
+  sock.ev.on("creds.update", saveCreds)
 
-    if (qr) currentQr = qr
+  sock.ev.on("connection.update", (update) => {
+    const { connection, qr, lastDisconnect } = update
+
+    if (qr) {
+      qrCode = qr
+      console.log("📸 QR gerado")
+    }
 
     if (connection === "open") {
-      currentQr = null
       console.log("✅ WhatsApp conectado")
+      qrCode = null
     }
 
     if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect?.error instanceof Boom &&
-        lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut
-
-      console.warn("⚠️ WhatsApp desconectado")
-
-      if (shouldReconnect) {
-        started = false
-        initWhatsApp()
-      }
+      console.log("⚠️ WhatsApp desconectado")
+      sock = null
+      initializing = false
     }
   })
 
-  sock.ev.on("creds.update", saveCreds)
+  initializing = false
+}
+
+export function getSocket() {
+  return sock
+}
+
+export function getQR() {
+  return qrCode
 }

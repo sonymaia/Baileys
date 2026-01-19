@@ -1,15 +1,16 @@
-import { getSocket, getQr } from "./whatsapp.js"
+import { getQR, getSocket } from "./whatsapp.js"
 import { authMiddleware } from "./middlewares/auth.js"
 
 export async function routes(app) {
-  // QR
+
+  // 🔓 Público (QR precisa ser acessado sem auth em muitos casos)
   app.get("/qr", async () => {
-    const qr = getQr()
+    const qr = getQR()
 
     if (!qr) {
       return {
-        status: "ok",
-        message: "WhatsApp já conectado ou QR indisponível"
+        status: "waiting",
+        message: "QR ainda não gerado"
       }
     }
 
@@ -19,23 +20,24 @@ export async function routes(app) {
     }
   })
 
-  // Enviar mensagem
+  // 🔐 Protegido
   app.post(
     "/sendText",
     { preHandler: authMiddleware },
     async (req, reply) => {
-      const { chatId, text } = req.body || {}
+      const sock = getSocket()
 
-      if (!chatId || !text) {
-        return reply.code(400).send({
-          error: "chatId e text são obrigatórios"
+      if (!sock) {
+        return reply.code(503).send({
+          error: "WhatsApp não conectado"
         })
       }
 
-      const sock = getSocket()
-      if (!sock) {
-        return reply.code(503).send({
-          error: "WhatsApp offline"
+      const { chatId, text } = req.body
+
+      if (!chatId || !text) {
+        return reply.code(400).send({
+          error: "chatId e text obrigatórios"
         })
       }
 

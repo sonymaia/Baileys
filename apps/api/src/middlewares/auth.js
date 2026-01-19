@@ -1,14 +1,14 @@
 export async function authMiddleware(request, reply) {
-  const authHeader = request.headers.authorization
+  const auth = request.headers.authorization
 
-  if (!authHeader) {
+  if (!auth) {
     return reply.code(401).send({
       error: "Unauthorized",
       message: "Missing Authorization header"
     })
   }
 
-  const [type, token] = authHeader.split(" ")
+  const [type, token] = auth.split(" ")
 
   if (type !== "Bearer" || !token) {
     return reply.code(401).send({
