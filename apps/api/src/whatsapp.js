@@ -1,37 +1,52 @@
-import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys"
+import makeWASocket, {
+  DisconnectReason,
+  useMultiFileAuthState
+} from "@whiskeysockets/baileys"
+import { Boom } from "@hapi/boom"
 import pino from "pino"
 
 let sock
-let ready = false
 
 export async function initWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth")
+  const { state, saveCreds } = await useMultiFileAuthState("sessions/whatsapp")
 
   sock = makeWASocket({
     auth: state,
+    printQRInTerminal: true,
     logger: pino({ level: "silent" })
   })
 
   sock.ev.on("creds.update", saveCreds)
 
-  sock.ev.on("connection.update", ({ connection, qr }) => {
-    if (qr) console.log("QR_CODE:", qr)
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect, qr } = update
+
+    if (qr) {
+      console.log("📱 QR CODE GERADO — escaneie no WhatsApp")
+    }
 
     if (connection === "open") {
-      ready = true
-      console.log("✅ WhatsApp conectado")
+      console.log("✅ WhatsApp CONECTADO com sucesso")
     }
 
     if (connection === "close") {
-      ready = false
-      console.log("⚠️ WhatsApp desconectado")
+      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode
+
+      console.log("⚠️ WhatsApp desconectado:", reason)
+
+      if (reason !== DisconnectReason.loggedOut) {
+        console.log("🔄 Tentando reconectar...")
+        initWhatsApp()
+      } else {
+        console.log("❌ Sessão expirada, precisa novo QR")
+      }
     }
   })
 }
 
 export function getSocket() {
-  if (!sock || !ready) {
-    throw new Error("WhatsApp não está pronto")
+  if (!sock) {
+    throw new Error("WhatsApp não inicializado")
   }
   return sock
 }
